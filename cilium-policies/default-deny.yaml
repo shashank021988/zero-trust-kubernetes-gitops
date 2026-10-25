@@ -1,0 +1,39 @@
+# Default-deny all ingress and egress for all pods
+# Workloads must explicitly allow traffic via CiliumNetworkPolicy
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: default-deny-all
+spec:
+  description: "Default deny all ingress and egress for all endpoints"
+  endpointSelector: {}
+  ingress:
+    - fromEntities:
+        - same-node
+  egress:
+    - toFQDNs:
+        - matchName: "kube-dns.kube-system.svc.cluster.local"
+    - toEntities:
+        - kube-apiserver
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-production-ingress
+  namespace: production
+spec:
+  description: "Allow ingress to production workloads from ingress controller only"
+  endpointSelector:
+    matchLabels:
+      app: backend
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: ingress-nginx
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+          rules:
+            http:
+              - method: "GET|POST|PUT|DELETE"
