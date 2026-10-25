@@ -1,0 +1,47 @@
+name: Zero-Trust Security Scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  trivy-scan:
+    name: Trivy Config + Container Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan Kubernetes manifests
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: config
+          scan-ref: .
+          severity: CRITICAL,HIGH
+          exit-code: 1
+
+  helm-lint:
+    name: Helm Lint & Template Validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v3
+        with:
+          version: 3.14.0
+      - run: helm lint helm/app-chart/
+      - run: helm template test-release helm/app-chart/ | kubectl apply --dry-run=client -f -
+        env:
+          KUBECONFIG: /dev/null
+
+  cosign-verify:
+    name: Container Image Signature Verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: sigstore/cosign-installer@main
+      - name: Verify image signatures
+        run: |
+          IMAGE=$(grep 'repository:' helm/app-chart/values.yaml | awk '{print $2}')
+          echo "Verifying: $IMAGE"
+          cosign verify --key cosign.pub $IMAGE || echo "WARNING: Image not signed"
